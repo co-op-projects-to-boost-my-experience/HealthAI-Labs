@@ -1,17 +1,17 @@
 import Layout from "../../components/Layout";
-import { fetchAnalysis } from "../../api";
+import { fetchContact } from "../../api";
 import { useEffect, useState } from "react";
 
 export default function Home() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    fetchAnalysis().then(res => setMessage(res.message));
+    fetchContact().then(res => setMessage(res.message));
   }, []);
 
   return (
     <Layout>
-      <h1>Analysis</h1>
+      <h1>Contact US</h1>
       <p>{message}</p>
     </Layout>
   );

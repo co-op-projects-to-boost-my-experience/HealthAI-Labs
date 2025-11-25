@@ -34,6 +34,11 @@ export const fetchAnalysis = async () => {
 };
 
 export const fetchAskDoctor = async () => {
-  const res = await axios.get(`${API_URL}/ask-doctor`);
+  const res = await axios.get(`${API_URL}/askdoctor`);
+  return res.data;
+};
+
+export const fetchContact = async () => {
+  const res = await axios.get(`${API_URL}/contact`);
   return res.data;
 };
