@@ -1,18 +1,18 @@
 import Layout from "../../components/Layout";
-import { fetchAskDoctor } from "../../api";
-import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import ComingSoon from "./components/ComingSoon";
 
-export default function Home() {
-  const [message, setMessage] = useState("");
+export default function AskDoc() {
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchAskDoctor().then(res => setMessage(res.message));
-  }, []);
+  // Function to handle navigation
+  const handleNav = (path) => {
+    navigate(path);
+  };
 
   return (
     <Layout>
-      <h1>AskDoctor</h1>
-      <p>{message}</p>
+      <ComingSoon onNavigate={handleNav} />
     </Layout>
   );
 }
