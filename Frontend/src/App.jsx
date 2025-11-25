@@ -1,55 +1,29 @@
-import React, { useEffect, useState } from "react";
-import {
-  fetchRoot,
-  fetchRays,
-  fetchReport,
-  fetchAbout,
-  fetchNews,
-  fetchAnalysis,
-  fetchAskDoctor,
-} from "./api";
+import { Routes, Route } from "react-router-dom";
 
-function App() {
-  const [messages, setMessages] = useState({});
+// Pages
+import Home from "./pages/Home";
+import Rays from "./pages/Rays";
+import Report from "./pages/Report";
+import About from "./pages/About";
+import News from "./pages/News";
+import Analysis from "./pages/Analysis";
+import AskDoc from "./pages/AskDoc";
+import Contact from "./pages/Contact";
+import NotFound from "./pages/NotFound";
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const root = await fetchRoot();
-      const rays = await fetchRays();
-      const report = await fetchReport();
-      const about = await fetchAbout();
-      const news = await fetchNews();
-      const analysis = await fetchAnalysis();
-      const askDoctor = await fetchAskDoctor();
-
-      setMessages({
-        root: root.message,
-        rays: rays.message,
-        report: report.message,
-        about: about.message,
-        news: news.message,
-        analysis: analysis.message,
-        askDoctor: askDoctor.message,
-      });
-    };
-
-    fetchData();
-  }, []);
-
+export default function App() {
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>Health API Dashboard</h1>
-      <ul>
-        <li>Root: {messages.root}</li>
-        <li>Rays: {messages.rays}</li>
-        <li>Report: {messages.report}</li>
-        <li>About: {messages.about}</li>
-        <li>News: {messages.news}</li>
-        <li>Analysis: {messages.analysis}</li>
-        <li>Ask Doctor: {messages.askDoctor}</li>
-      </ul>
-    </div>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/rays" element={<Rays />} />
+        <Route path="/report" element={<Report />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/news" element={<News />} />
+        <Route path="/analysis" element={<Analysis />} />
+        <Route path="/askdoctor" element={<AskDoc />} />
+        <Route path="/contact" element={<Contact />} />
+        {/* Catch-all route for undefined URLs */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
   );
 }
-
-export default App;

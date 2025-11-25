@@ -42,6 +42,10 @@ async def news():
 async def analysis():
     return {"message": "Symptom analysis"}
 
-@app.get("/ask-doctor")
+@app.get("/askdoctor")
 async def ask_doctor():
     return {"message": "AI doctor consultation"}
+
+@app.get("/contact")
+async def contact():
+    return {"message": "contact us"}
