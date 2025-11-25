@@ -1,8 +1,9 @@
 import Layout from "../../components/Layout";
+import AboutHero from "./components/About";
 import { fetchAbout } from "../../api";
 import { useEffect, useState } from "react";
 
-export default function Home() {
+export default function About() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -11,8 +12,8 @@ export default function Home() {
 
   return (
     <Layout>
-      <h1>About</h1>
-      <p>{message}</p>
+      <AboutHero />
+      {message && <p className="text-center py-4 text-gray-600">{message}</p>}
     </Layout>
   );
 }
