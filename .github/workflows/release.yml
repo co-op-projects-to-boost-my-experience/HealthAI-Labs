@@ -18,10 +18,10 @@ jobs:
         include:
           - dockerfile: Dockerfile.Backend
             image: healthai-labs/fastapi-back
-            context: ./backend
+            context: ./Backend
           - dockerfile: Dockerfile.Frontend
             image: healthai-labs/react-front
-            context: ./frontend
+            context: ./Frontend
 
     steps:
       - name: Checkout code
