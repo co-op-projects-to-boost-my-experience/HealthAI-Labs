@@ -2,6 +2,7 @@ import axios from "axios";
 
 // Use the Docker service name for backend
 const API_URL = "http://backend:8000";
+const API_BASE_URL = '/api'; // Relative path so Nginx handles the proxy
 
 export const fetchRoot = async () => {
   const res = await axios.get(`${API_URL}/`);
@@ -23,11 +24,6 @@ export const fetchAbout = async () => {
   return res.data;
 };
 
-export const fetchNews = async () => {
-  const res = await axios.get(`${API_URL}/news`);
-  return res.data;
-};
-
 export const fetchAnalysis = async () => {
   const res = await axios.get(`${API_URL}/analysis`);
   return res.data;
@@ -41,4 +37,20 @@ export const fetchAskDoctor = async () => {
 export const fetchContact = async () => {
   const res = await axios.get(`${API_URL}/contact`);
   return res.data;
+};
+
+export const fetchNews = async (page = 1) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/news?category=health&lang=en&page=${page}`);
+    console.log('Cache Status:', response.headers.get('X-Cache-Status'));
+
+    if (!response.ok) {
+      throw new Error(`Error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to fetch news:", error);
+    throw error;
+  }
 };

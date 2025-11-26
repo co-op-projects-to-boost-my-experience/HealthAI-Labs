@@ -1,25 +1,37 @@
-version: "3.9"
+version: '3.8'
+
 services:
   backend:
     build:
-      context: ./Backend             # folder containing your backend code
-      dockerfile: Dockerfile.Backend # name of the Dockerfile
-    container_name: backend
+      context: ./Backend
+      dockerfile: Dockerfile.Backend
+    container_name: healthai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GNEWS_API_KEY=${GNEWS_API_KEY}
+    env_file:
+      - .env
     networks:
-      - app-network
+      - healthai-network
 
   frontend:
     build:
       context: ./Frontend
       dockerfile: Dockerfile.Frontend
-    container_name: frontend
+    container_name: healthai-frontend
     ports:
       - "80:80"
     depends_on:
       - backend
+    volumes:
+      - nginx_cache:/var/cache/nginx
     networks:
-      - app-network
+      - healthai-network
+
+volumes:
+  nginx_cache:
 
 networks:
-  app-network:
+  healthai-network:
     driver: bridge
