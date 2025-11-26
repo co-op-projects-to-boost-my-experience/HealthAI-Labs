@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: docker.io
-  BACKEND_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/fastapi-back
-  FRONTEND_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/react-front
+  BACKEND_IMAGE_NAME: healthai-labs/fastapi-back
+  FRONTEND_IMAGE_NAME: healthai-labs/react-front
 
 jobs:
   build-and-push:
@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - dockerfile: Dockerfile.Backend
-            image: ${{ env.BACKEND_IMAGE_NAME }}
-            context: ./Backend
+            image: healthai-labs/fastapi-back
+            context: ./backend
           - dockerfile: Dockerfile.Frontend
-            image: ${{ env.FRONTEND_IMAGE_NAME }}
-            context: ./Frontend
+            image: healthai-labs/react-front
+            context: ./frontend
 
     steps:
       - name: Checkout code
