@@ -2,3 +2,4 @@ fastapi
 uvicorn[stander]
 httpx
 python-dotenv
+tensorflow keras

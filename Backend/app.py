@@ -6,13 +6,25 @@ import os
 import time
 from typing import Optional, Dict, Any, List
 
+from fastapi import UploadFile, File
+import numpy as np
+import os
+
+from keras.layers import TFSMLayer
+from keras.preprocessing.image import load_img, img_to_array
+
+
 app = FastAPI()
 router = APIRouter()
 
 # Allow React frontend container to access backend
 origins = [
     "http://frontend",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost",
+    "http://127.0.0.1",
 ]
 
 app.add_middleware(
@@ -224,6 +236,61 @@ async def get_medical_news(
         "page": page,
         "has_more": has_more
     })
+    
+    
+print("Loading MRI model...")
+model = TFSMLayer("model_Ai_dir", call_endpoint="serving_default")
+print("MRI model loaded.")
+
+class_dict = {
+    0: 'Glioma',
+    1: 'Meningioma',
+    2: 'No Tumor',
+    3: 'Pituitary'
+}
+
+def predict_mri_image(image_path: str):
+    print(f"[MRI] Loading image from: {image_path}")
+
+    img = load_img(image_path, target_size=(128, 128))
+    img_array = img_to_array(img)
+    img_array = img_array / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    print("[MRI] Running model prediction...")
+    pred = model(img_array)
+
+    if isinstance(pred, dict):
+        pred = next(iter(pred.values()))
+
+    pred = pred.numpy()
+
+    class_index = int(np.argmax(pred, axis=-1)[0])
+    confidence = float(pred[0][class_index])
+    label = class_dict.get(class_index, "unknown")
+
+    print(f"[MRI] Prediction done: {label} ({confidence:.4f})")
+    return label, confidence
+
+
+
+
+@app.post("/rays/mri")
+async def mri_api(file: UploadFile = File(...)):
+    os.makedirs("uploads", exist_ok=True)
+    temp_path = os.path.join("uploads", "upload.png")
+
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+
+    label, confidence = predict_mri_image(temp_path)
+
+    return {
+        "label": label,
+        "confidence": confidence
+    }
+
+    
 
 # Mount router
 app.include_router(router, prefix="/api")
