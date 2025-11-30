@@ -93,3 +93,5 @@ azure-pipelines.yml
 .eslintrc*
 .babelrc
 jest.config.js
+
+MRI

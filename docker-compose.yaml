@@ -10,11 +10,12 @@ services:
       - "8000:8000"
     environment:
       - GNEWS_API_KEY=${GNEWS_API_KEY}
+      - TF_CPP_MIN_LOG_LEVEL=2
     env_file:
       - .env
     networks:
       - healthai-network
-
+    restart: unless-stopped
   frontend:
     build:
       context: ./Frontend
@@ -28,7 +29,7 @@ services:
       - nginx_cache:/var/cache/nginx
     networks:
       - healthai-network
-
+    restart: unless-stopped
 volumes:
   nginx_cache:
 

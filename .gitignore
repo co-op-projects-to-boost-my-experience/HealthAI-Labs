@@ -25,7 +25,7 @@ MANIFEST
 venv/
 env/
 ENV/
-
+.venb
 # Environment variables
 .env
 .env.local
@@ -116,3 +116,4 @@ out/
 # !.dockerignore
 # !requirements.txt
 # !package.json
+MRI

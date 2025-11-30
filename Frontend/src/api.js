@@ -1,56 +1,62 @@
 import axios from "axios";
 
-// Use the Docker service name for backend
-const API_URL = "http://backend:8000";
-const API_BASE_URL = '/api'; // Relative path so Nginx handles the proxy
+// =========================
+// API Base URL Configuration
+// =========================
+// In development: uses VITE_API_URL from .env (http://localhost:8000/api)
+// In production: uses relative path /api (nginx proxies to backend)
+const API_BASE_URL = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
-export const fetchRoot = async () => {
-  const res = await axios.get(`${API_URL}/`);
-  return res.data;
-};
+// =========================
+// Axios Global Config
+// =========================
+axios.defaults.timeout = 10000;
+axios.defaults.headers.common['Accept'] = 'application/json';
 
-export const fetchRays = async () => {
-  const res = await axios.get(`${API_URL}/rays`);
-  return res.data;
-};
-
-export const fetchReport = async () => {
-  const res = await axios.get(`${API_URL}/report`);
-  return res.data;
-};
-
-export const fetchAbout = async () => {
-  const res = await axios.get(`${API_URL}/about`);
-  return res.data;
-};
-
-export const fetchAnalysis = async () => {
-  const res = await axios.get(`${API_URL}/analysis`);
-  return res.data;
-};
-
-export const fetchAskDoctor = async () => {
-  const res = await axios.get(`${API_URL}/askdoctor`);
-  return res.data;
-};
-
-export const fetchContact = async () => {
-  const res = await axios.get(`${API_URL}/contact`);
-  return res.data;
-};
-
-export const fetchNews = async (page = 1) => {
+// =========================
+// Generic GET Helper
+// =========================
+async function get(endpoint, params = {}) {
   try {
-    const response = await fetch(`${API_BASE_URL}/news?category=health&lang=en&page=${page}`);
-    console.log('Cache Status:', response.headers.get('X-Cache-Status'));
-
-    if (!response.ok) {
-      throw new Error(`Error: ${response.status}`);
-    }
-
-    return await response.json();
+    const res = await axios.get(`${API_BASE_URL}${endpoint}`, { params });
+    return res.data;
   } catch (error) {
-    console.error("Failed to fetch news:", error);
+    console.error(`[API ERROR] GET ${endpoint}:`, error.message || error);
     throw error;
   }
-};
+}
+
+// =========================
+// Generic POST Helper
+// =========================
+async function post(endpoint, data = {}, config = {}) {
+  try {
+    const res = await axios.post(`${API_BASE_URL}${endpoint}`, data, config);
+    return res.data;
+  } catch (error) {
+    console.error(`[API ERROR] POST ${endpoint}:`, error.message || error);
+    throw error;
+  }
+}
+
+// =========================
+// API Endpoints
+// =========================
+export const fetchRoot = () => get('/');
+export const fetchRays = () => get('/rays');
+export const fetchReport = () => get('/report');
+export const fetchAbout = () => get('/about');
+export const fetchAnalysis = () => get('/analysis');
+export const fetchAskDoctor = () => get('/askdoctor');
+export const fetchContact = () => get('/contact');
+
+export const fetchNews = (page = 1, category = "health", lang = "en") => 
+  get('/news', { category, lang, page });
+
+// ✅ MRI Upload - matches backend endpoint /api/rays/mri
+export const uploadMri = (formData) =>
+  post('/rays/mri', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });

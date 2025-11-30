@@ -1,296 +1,292 @@
-from fastapi import FastAPI, APIRouter, Query
+import os
+import shutil
+import time
+from typing import Dict
+
+import numpy as np
+import requests # Needed for fetching external news data
+from fastapi import FastAPI, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import httpx
-import os
-import time
-from typing import Optional, Dict, Any, List
 
-from fastapi import UploadFile, File
-import numpy as np
-import os
-
+# Note: TensorFlow/Keras imports are kept but logging is removed
 from keras.layers import TFSMLayer
 from keras.preprocessing.image import load_img, img_to_array
 
+# -------------------------
+# Config
+# -------------------------
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "MRI")
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI()
+CLASS_DICT: Dict[int, str] = {0: 'Glioma', 1: 'Meningioma', 2: 'No Tumor', 3: 'Pituitary'}
+MODEL = None
+
+# API Key read from the environment variable specified by the user
+GNEWS_API_KEY = os.getenv("GNEWS_API_KEY") 
+
+# -------------------------
+# FastAPI Setup
+# -------------------------
+app = FastAPI(title="HealthAI Backend")
 router = APIRouter()
-
-# Allow React frontend container to access backend
-origins = [
-    "http://frontend",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost",
-    "http://127.0.0.1",
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Adjust in prod!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Simple in-memory cache for aggregated news pools
-# Keyed by (category, lang). Value: {"ts": <epoch>, "articles": [..]}
-NEWS_CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SECONDS = 300  # 5 minutes
-
-# Root endpoints (keep your existing ones)
-@app.get("/")
-async def root():
-    return {"message": "Welcome to Health API"}
-
-@app.get("/rays")
-async def rays():
-    return {"message": "Medical imaging analysis"}
-
-@app.get("/report")
-async def report():
-    return {"message": "Health report generation"}
-
-@app.get("/about")
-async def about():
-    return {"message": "About our service"}
-
-@app.get("/analysis")
-async def analysis():
-    return {"message": "Symptom analysis"}
-
-@app.get("/askdoctor")
-async def ask_doctor():
-    return {"message": "AI doctor consultation"}
-
-@app.get("/contact")
-async def contact():
-    return {"message": "contact us"}
-
-def cache_key(category: str, lang: str) -> str:
-    return f"{category}::{lang}"
-
-async def fetch_search_pages(api_key: str, query: str, lang: str, per_page: int, max_pages: int = 5) -> List[Dict[str, Any]]:
-    """
-    Fetch multiple pages from GNews /search endpoint until we collect enough articles
-    or reach max_pages. Returns list of articles (may be fewer than requested).
-    """
-    url = "https://gnews.io/api/v4/search"
-    collected: List[Dict[str, Any]] = []
-    seen_urls = set()
-
-    async with httpx.AsyncClient() as client:
-        for p in range(1, max_pages + 1):
-            params = {
-                "q": query or "",   # empty query returns broader results
-                "lang": lang,
-                "max": per_page,
-                "page": p,
-                "apikey": api_key
-            }
-            try:
-                resp = await client.get(url, params=params, timeout=10.0)
-                resp.raise_for_status()
-                data = resp.json()
-                page_articles = data.get("articles", [])
-            except Exception:
-                # stop on any external error and return what we have
-                break
-
-            for a in page_articles:
-                u = a.get("url") or a.get("link") or a.get("title")
-                if not u:
-                    continue
-                if u in seen_urls:
-                    continue
-                seen_urls.add(u)
-                collected.append(a)
-
-            # stop early if we already have enough for a single page of results
-            # caller will request more pages by increasing max_pages if needed
-            if len(collected) >= per_page * max_pages:
-                break
-
-            # if the API returned fewer items than requested, likely no more pages
-            if len(page_articles) < per_page:
-                break
-
-    return collected
-
-@router.get("/news")
-async def get_medical_news(
-    category: Optional[str] = Query("health"),
-    lang: Optional[str] = Query("en"),
-    max_results: Optional[int] = Query(12, ge=1, le=50),
-    page: Optional[int] = Query(1, ge=1)
-):
-    """
-    Returns paginated news built from an aggregated pool fetched from GNews.
-    Strategy:
-      - Try to use /search endpoint and fetch multiple pages until we have enough unique articles.
-      - Cache the aggregated pool for CACHE_TTL_SECONDS to avoid repeated external calls.
-      - Slice the pool for the requested page.
-    """
-    api_key = os.getenv("GNEWS_API_KEY")
-    if not api_key:
-        # Mock fallback for local dev
-        return JSONResponse(content={
-            "articles": [
-                {
-                    "title": "Mock Medical News 1",
-                    "description": "This is a mock description",
-                    "image": "https://via.placeholder.com/400x200",
-                    "url": "#1",
-                    "source": {"name": "MockSource"},
-                    "publishedAt": "2025-11-25T12:00:00Z"
-                },
-                {
-                    "title": "Mock Medical News 2",
-                    "description": "This is a second mock description",
-                    "image": "https://via.placeholder.com/400x200",
-                    "url": "#2",
-                    "source": {"name": "MockSource"},
-                    "publishedAt": "2025-11-24T12:00:00Z"
-                }
-            ],
-            "total": 2,
-            "page": page,
-            "has_more": False,
-            "message": "No API key"
-        })
-
-    key = cache_key(category, lang)
-    now = time.time()
-    pool = NEWS_CACHE.get(key)
-
-    # If cache expired or missing, rebuild pool
-    if not pool or (now - pool.get("ts", 0) > CACHE_TTL_SECONDS):
-        # We'll attempt to fetch a larger pool by querying multiple related terms
-        # and multiple pages if necessary. This increases chance of more unique results.
-        queries = [
-            category or "health",
-            "medicine",
-            "medical",
-            "healthcare",
-            "clinical research",
-            "medical research"
-        ]
-
-        aggregated: List[Dict[str, Any]] = []
-        seen = set()
-        # per_page for each external request (GNews max param is usually <= 100 depending on plan)
-        per_page = 20
-        max_pages_per_query = 3  # try up to 3 pages per query (tunable)
-        # iterate queries until we have a reasonably large pool
-        for q in queries:
-            if len(aggregated) >= 200:  # safety cap
-                break
-            fetched = await fetch_search_pages(api_key=api_key, query=q, lang=lang, per_page=per_page, max_pages=max_pages_per_query)
-            for a in fetched:
-                u = a.get("url") or a.get("link") or a.get("title")
-                if not u or u in seen:
-                    continue
-                seen.add(u)
-                aggregated.append(a)
-            # small delay could be added if rate limits are a concern
-
-        # final fallback: if aggregated is empty, try top-headlines once
-        if not aggregated:
-            try:
-                url = "https://gnews.io/api/v4/top-headlines"
-                params = {"category": category, "lang": lang, "max": 50, "apikey": api_key}
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(url, params=params, timeout=10.0)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    for a in data.get("articles", []):
-                        u = a.get("url") or a.get("title")
-                        if not u or u in seen:
-                            continue
-                        seen.add(u)
-                        aggregated.append(a)
-            except Exception:
-                # ignore and continue with whatever we have
-                pass
-
-        # store in cache
-        NEWS_CACHE[key] = {"ts": now, "articles": aggregated}
-
-        pool = NEWS_CACHE[key]
-
-    all_articles = pool.get("articles", [])
-
-    # compute slice for requested page
-    start = (page - 1) * max_results
-    end = start + max_results
-    sliced = all_articles[start:end]
-
-    # has_more if there are more items after this slice
-    has_more = end < len(all_articles)
-
-    return JSONResponse(content={
-        "articles": sliced,
-        "total": len(all_articles),
-        "page": page,
-        "has_more": has_more
-    })
+# -------------------------
+# Helper Functions (Simplified Error Handling)
+# -------------------------
+def load_model():
+    """Load the TensorFlow model once. Using print for critical messages."""
+    global MODEL
     
-    
-print("Loading MRI model...")
-model = TFSMLayer("model_Ai_dir", call_endpoint="serving_default")
-print("MRI model loaded.")
+    if not os.path.exists(MODEL_DIR):
+        print(f"ERROR: MRI model not found at {MODEL_DIR}") 
+        raise FileNotFoundError("MRI model missing. Please include it in the Docker image.")
 
-class_dict = {
-    0: 'Glioma',
-    1: 'Meningioma',
-    2: 'No Tumor',
-    3: 'Pituitary'
-}
+    import tensorflow as tf
+    # Force CPU in production containers without GPU
+    try:
+        tf.config.set_visible_devices([], 'GPU')
+    except Exception:
+        pass
 
-def predict_mri_image(image_path: str):
-    print(f"[MRI] Loading image from: {image_path}")
+    print(f"INFO: Loading model from {MODEL_DIR}...") 
+    MODEL = TFSMLayer(MODEL_DIR, call_endpoint="serving_default")
+    print("INFO: ✅ Model loaded successfully")
+
+def predict_image(image_path: str):
+    """Run inference on a single image."""
+    if MODEL is None:
+        raise RuntimeError("Model not loaded")
 
     img = load_img(image_path, target_size=(128, 128))
-    img_array = img_to_array(img)
-    img_array = img_array / 255.0
+    img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
-    print("[MRI] Running model prediction...")
-    pred = model(img_array)
+    prediction = MODEL(img_array)
+    if isinstance(prediction, dict):
+        prediction = next(iter(prediction.values()))
 
-    if isinstance(pred, dict):
-        pred = next(iter(pred.values()))
-
-    pred = pred.numpy()
-
-    class_index = int(np.argmax(pred, axis=-1)[0])
-    confidence = float(pred[0][class_index])
-    label = class_dict.get(class_index, "unknown")
-
-    print(f"[MRI] Prediction done: {label} ({confidence:.4f})")
+    prediction = prediction.numpy()
+    class_index = int(np.argmax(prediction, axis=-1)[0])
+    confidence = float(prediction[0][class_index])
+    label = CLASS_DICT.get(class_index, "Unknown")
     return label, confidence
 
+# -------------------------
+# Startup Event (Simplified Error Handling)
+# -------------------------
+@app.on_event("startup")
+def startup_event():
+    print("INFO: Starting HealthAI Backend...") 
+    load_model()
 
+# -------------------------
+# Root Endpoints
+# -------------------------
+@app.get("/")
+def root():
+    return {"status": "online", "service": "HealthAI Backend"}
 
-
-@app.post("/rays/mri")
-async def mri_api(file: UploadFile = File(...)):
-    os.makedirs("uploads", exist_ok=True)
-    temp_path = os.path.join("uploads", "upload.png")
-
-    with open(temp_path, "wb") as f:
-        f.write(await file.read())
-
-    label, confidence = predict_mri_image(temp_path)
-
+# -------------------------
+# API Router Endpoints (Live News Implemented)
+# -------------------------
+@router.get("/")
+def api_root():
+    """API root - fetchRoot()"""
     return {
-        "label": label,
-        "confidence": confidence
+        "status": "online",
+        "service": "HealthAI API",
+        "version": "1.0.0"
     }
 
-    
+@router.get("/rays")
+def get_rays():
+    """Rays page data - fetchRays()"""
+    return {
+        "status": "success",
+        "title": "Medical Imaging Analysis",
+        "description": "Upload your MRI scans for AI-powered analysis",
+        "supported_formats": ["jpg", "jpeg", "png"],
+        "model_ready": MODEL is not None
+    }
 
-# Mount router
+@router.get("/report")
+def get_report():
+    """Report page data - fetchReport()"""
+    return {
+        "status": "success",
+        "reports": [],
+        "message": "No reports available yet"
+    }
+
+@router.get("/about")
+def get_about():
+    """About page data - fetchAbout()"""
+    return {
+        "status": "success",
+        "name": "HealthAI Labs",
+        "description": "AI-powered medical imaging analysis platform",
+        "version": "1.0.0",
+        "features": ["MRI Analysis", "Brain Tumor Detection", "Medical Reports"]
+    }
+
+@router.get("/analysis")
+def get_analysis():
+    """Analysis page data - fetchAnalysis()"""
+    return {
+        "status": "success",
+        "message": "Analysis Dashboard",
+        "available_analyses": ["MRI", "CT Scan", "X-Ray"],
+        "recent_analyses": []
+    }
+
+@router.get("/askdoctor")
+def get_askdoctor():
+    """Ask Doctor page data - fetchAskDoctor()"""
+    return {
+        "status": "success",
+        "message": "Ask a Doctor",
+        "available": True
+    }
+
+@router.get("/contact")
+def get_contact():
+    """Contact page data - fetchContact()"""
+    return {
+        "status": "success",
+        "email": "contact@healthai.com",
+        "phone": "+1-234-567-8900",
+        "address": "123 Health St, Medical City"
+    }
+
+@router.get("/news")
+def get_news(category: str = "health", lang: str = "en", page: int = 1):
+    """Fetch Real News from NewsAPI, fixing missing URL and source format."""
+    
+    if not GNEWS_API_KEY:
+        print("CRITICAL: GNEWS_API_KEY environment variable is NOT set. Returning mock data.")
+        # Mock data structure updated to match React frontend expectations (url, image, structured source)
+        return {
+             "status": "success",
+             "category": category,
+             "language": lang,
+             "page": page,
+             "total_pages": 5,
+             "articles": [
+                 {
+                     "id": "mock-1",
+                     "title": "Mock Data: AI in Disease Diagnostics",
+                     "description": "This is mock data because the GNEWS_API_KEY environment variable is not set. Please set the key to see real news.",
+                     "publishedAt": "2025-11-28T10:00:00Z", 
+                     "source": {"name": "Mock News Daily"},
+                     "url": "https://www.example.com/mock-article-1",
+                     "image": "https://placehold.co/600x337/3b82f6/ffffff?text=MOCK+NEWS"
+                 }
+             ]
+         }
+
+    # NewsAPI Endpoint
+    url = f"https://newsapi.org/v2/top-headlines?category={category}&language={lang}&page={page}&pageSize=20&apiKey={GNEWS_API_KEY}"
+    
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status() # Raise an exception for HTTP error codes
+        data = response.json()
+        
+        if data.get("status") != "ok":
+            print(f"ERROR: NewsAPI returned status '{data.get('status')}' - Message: {data.get('message')}")
+            return {"status": "error", "articles": [], "message": data.get('message')}
+
+        # Format Data for React Frontend
+        formatted_articles = []
+        for article in data.get("articles", []):
+            if article.get("title") == "[Removed]" or not article.get("url"):
+                continue
+
+            # Ensure all expected fields are present, using fallbacks if necessary
+            formatted_articles.append({
+                "id": article.get("url"), 
+                "title": article.get("title", "No Title Available"),
+                "description": article.get("description", article.get("content", "No description available.")),
+                "url": article.get("url"),         # This is the critical field for the link
+                "image": article.get("urlToImage"), # This is the critical field for the image
+                "publishedAt": article.get("publishedAt"),
+                "source": {
+                    "name": article.get("source", {}).get("name", "Unknown Source")
+                }
+            })
+
+        # Calculate total pages (assuming 20 articles per page, typical for NewsAPI)
+        total_results = data.get("totalResults", 100)
+        total_pages = min(int(total_results / 20) + 1, 5) # Cap at 5 pages to manage rate limits
+
+        return {
+            "status": "success",
+            "category": category,
+            "language": lang,
+            "page": page,
+            "total_pages": total_pages,
+            "articles": formatted_articles
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Failed to connect to NewsAPI: {e}")
+        return {
+            "status": "error",
+            "articles": [],
+            "message": "Connection error to external news service."
+        }
+
+@router.post("/rays/mri")
+async def analyze_mri(file: UploadFile = File(...)):
+    """Analyze MRI scan - uploadMri()"""
+    if MODEL is None:
+        return JSONResponse(status_code=503, content={"error": "AI Model not ready"})
+
+    temp_filename = os.path.join(UPLOAD_DIR, f"{int(time.time())}_{file.filename}")
+
+    try:
+        # Save uploaded file
+        with open(temp_filename, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Predict
+        label, confidence = predict_image(temp_filename)
+        
+        return {
+            "status": "success",
+            "prediction": label,
+            "confidence": float(confidence),
+            "confidence_percent": f"{confidence:.2%}",
+            "details": {"class": label, "score": float(confidence)}
+        }
+    except Exception as e:
+        print(f"ERROR: MRI analysis failed: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={"error": "Analysis failed", "message": str(e)}
+        )
+    finally:
+        # Clean up
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
+
+# Include router with /api prefix
 app.include_router(router, prefix="/api")
+
+# -------------------------
+# Run Uvicorn in Prod
+# -------------------------
+if __name__ == "__main__":
+    import uvicorn
+    # log_level is set to "info" for general container health visibility
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -1,5 +1,9 @@
-fastapi
-uvicorn[stander]
-httpx
-python-dotenv
-tensorflow keras
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+httpx>=0.25.0
+python-multipart>=0.0.6
+numpy>=1.24.3
+tensorflow>=2.15.0
+keras>=2.15.0
+pillow>=10.1.0
+py7zr>=0.20.8

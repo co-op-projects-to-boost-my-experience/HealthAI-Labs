@@ -6,13 +6,8 @@ export default function Layout({ children }) {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <Navbar />
 
-      <main
-        style={{
-          flexGrow: 1,
-          padding: "20px",
-          paddingTop: "100px", 
-        }}
-      >
+      {/* flexGrow: 1 pushes the footer down */}
+      <main style={{ flexGrow: 1, padding: "20px" }}>
         {children}
       </main>
 

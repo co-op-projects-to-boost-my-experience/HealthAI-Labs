@@ -1,8 +1,62 @@
-# backend/Dockerfile
-FROM python:3.12-slim
-WORKDIR /app
+# =============================
+# Stage 1: Builder
+# =============================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    p7zip-full \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and extract MRI model
+RUN wget -O MRI.7z https://github.com/co-op-projects-to-boost-my-experience/HealthAI-Labs/releases/download/v1.0.3/MRI.7z && \
+    7z x MRI.7z -o/build && \
+    rm MRI.7z
+
+# Note: If the .7z extracts to a subfolder, uncomment and adjust:
+# RUN mv /build/extracted-folder-name /build/MRI
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+# =============================
+# Stage 2: Production
+# =============================
+FROM python:3.11-slim AS production
+
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder (use same Python installation)
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy MRI model from builder
+COPY --from=builder /build/MRI /app/MRI
+
+# Copy application code
+COPY app.py .
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Expose port
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Use non-root user for safety
+RUN useradd -m healthai && \
+    chown -R healthai:healthai /app
+USER healthai
+
+# Command
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "info"]
