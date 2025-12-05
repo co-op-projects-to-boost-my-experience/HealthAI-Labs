@@ -140,7 +140,7 @@ version: '3.8'
 
 services:
   backend:
-    image: passw0rd010/healthai-labs:backend
+    image: passw0rd010/healthai-labs:backendv2
     container_name: healthai-backend
     ports:
       - "8000:8000"
@@ -152,7 +152,7 @@ services:
       - healthai-network
 
   frontend:
-    image: passw0rd010/healthai-labs:frontend
+    image: passw0rd010/healthai-labs:frontendv2
     container_name: healthai-frontend
     ports:
       - "80:80"
