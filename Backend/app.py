@@ -6,14 +6,19 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 import joblib
-import requests  # Needed for fetching external news data
+import requests
 from fastapi import FastAPI, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# Note: TensorFlow/Keras imports are kept but logging is removed
-from keras.layers import TFSMLayer
+# --- FIX: Removed TFSMLayer import which was causing the crash ---
+# from keras.layers import TFSMLayer 
 from keras.preprocessing.image import load_img, img_to_array
+import tensorflow as tf  # Added explicit TF import
+
+# Import database and auth
+from db import init_db, check_db_connection
+from auth import auth_router
 
 # -------------------------
 # Config
@@ -57,14 +62,14 @@ app.add_middleware(
 # Helper Functions (MRI Model)
 # -------------------------
 def load_mri_model():
-    """Load the TensorFlow MRI model once. Using print for critical messages."""
+    """Load the TensorFlow MRI model using tf.saved_model.load (Safe for all versions)."""
     global MRI_MODEL
     
     if not os.path.exists(MODEL_DIR):
         print(f"ERROR: MRI model not found at {MODEL_DIR}")
-        raise FileNotFoundError("MRI model missing. Please include it in the Docker image.")
+        # We don't raise here to allow the app to start even if model is missing (optional)
+        return
 
-    import tensorflow as tf
     # Force CPU in production containers without GPU
     try:
         tf.config.set_visible_devices([], 'GPU')
@@ -72,8 +77,16 @@ def load_mri_model():
         pass
 
     print(f"INFO: Loading MRI model from {MODEL_DIR}...")
-    MRI_MODEL = TFSMLayer(MODEL_DIR, call_endpoint="serving_default")
-    print("INFO: ✅ MRI Model loaded successfully")
+    try:
+        # --- FIX: Using standard TF SavedModel loader instead of TFSMLayer ---
+        loaded_bundle = tf.saved_model.load(MODEL_DIR)
+        
+        # We extract the default serving signature (acts like a function)
+        MRI_MODEL = loaded_bundle.signatures['serving_default']
+        print("INFO: ✅ MRI Model loaded successfully")
+    except Exception as e:
+        print(f"ERROR: Failed to load MRI model: {e}")
+        MRI_MODEL = None
 
 def predict_mri_image(image_path: str):
     """Run inference on a single MRI image."""
@@ -84,11 +97,20 @@ def predict_mri_image(image_path: str):
     img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
-    prediction = MRI_MODEL(img_array)
+    # --- FIX: Convert numpy array to TF Tensor (Required for signatures) ---
+    input_tensor = tf.constant(img_array, dtype=tf.float32)
+
+    # Predict
+    prediction = MRI_MODEL(input_tensor)
+    
+    # Handle Dictionary output (standard for SavedModel signatures)
     if isinstance(prediction, dict):
+        # Extract the first output tensor (usually 'dense_X' or 'output_0')
         prediction = next(iter(prediction.values()))
 
+    # Convert back to numpy
     prediction = prediction.numpy()
+    
     class_index = int(np.argmax(prediction, axis=-1)[0])
     confidence = float(prediction[0][class_index])
     label = CLASS_DICT.get(class_index, "Unknown")
@@ -102,21 +124,16 @@ def load_ckd_models():
     global CKD_SCALER, CKD_DIAGNOSIS_MODEL, CKD_STAGE_MODEL, CKD_MODEL_READY
     
     try:
-        # Check if CKD directory exists
         if not os.path.exists(CKD_MODEL_DIR):
             print(f"WARNING: CKD model directory not found at {CKD_MODEL_DIR}")
             return
             
-        # Check if all required files exist
         if not all([
             os.path.exists(CKD_SCALER_PATH),
             os.path.exists(CKD_DIAGNOSIS_PATH),
             os.path.exists(CKD_STAGE_PATH)
         ]):
             print(f"WARNING: CKD model files not found in {CKD_MODEL_DIR}")
-            print(f"  Scaler: {os.path.exists(CKD_SCALER_PATH)}")
-            print(f"  Diagnosis: {os.path.exists(CKD_DIAGNOSIS_PATH)}")
-            print(f"  Stage: {os.path.exists(CKD_STAGE_PATH)}")
             return
         
         print(f"INFO: Loading CKD models from {CKD_MODEL_DIR}...")
@@ -135,8 +152,20 @@ def load_ckd_models():
 @app.on_event("startup")
 def startup_event():
     print("INFO: Starting HealthAI Backend...")
+    
+    # Initialize database
+    print("INFO: Initializing database...")
+    try:
+        check_db_connection()
+        init_db()
+    except Exception as e:
+        print(f"WARNING: Database initialization failed: {e}")
+    
+    # Load ML models
     load_mri_model()
     load_ckd_models()
+    
+    print("INFO: ✅ HealthAI Backend started successfully")
 
 # -------------------------
 # Root Endpoints
@@ -150,7 +179,6 @@ def root():
 # -------------------------
 @router.get("/")
 def api_root():
-    """API root - fetchRoot()"""
     return {
         "status": "online",
         "service": "HealthAI API",
@@ -159,7 +187,6 @@ def api_root():
 
 @router.get("/rays")
 def get_rays():
-    """Rays page data - fetchRays()"""
     return {
         "status": "success",
         "title": "Medical Imaging Analysis",
@@ -170,7 +197,6 @@ def get_rays():
 
 @router.get("/report")
 def get_report():
-    """Report page data - fetchReport()"""
     return {
         "status": "success",
         "reports": [],
@@ -179,7 +205,6 @@ def get_report():
 
 @router.get("/about")
 def get_about():
-    """About page data - fetchAbout()"""
     return {
         "status": "success",
         "name": "HealthAI Labs",
@@ -190,7 +215,6 @@ def get_about():
 
 @router.get("/analysis")
 def get_analysis():
-    """Analysis page data - fetchAnalysis()"""
     return {
         "status": "success",
         "message": "Analysis Dashboard",
@@ -223,7 +247,6 @@ def get_analysis():
 
 @router.get("/askdoctor")
 def get_askdoctor():
-    """Ask Doctor page data - fetchAskDoctor()"""
     return {
         "status": "success",
         "message": "Ask a Doctor",
@@ -232,7 +255,6 @@ def get_askdoctor():
 
 @router.get("/contact")
 def get_contact():
-    """Contact page data - fetchContact()"""
     return {
         "status": "success",
         "email": "contact@healthai.com",
@@ -242,28 +264,27 @@ def get_contact():
 
 @router.get("/news")
 def get_news(category: str = "health", lang: str = "en", page: int = 1):
-    """Fetch Real News from NewsAPI, fixing missing URL and source format."""
     
     if not GNEWS_API_KEY:
         print("CRITICAL: GNEWS_API_KEY environment variable is NOT set. Returning mock data.")
         return {
-            "status": "success",
-            "category": category,
-            "language": lang,
-            "page": page,
-            "total_pages": 5,
-            "articles": [
-                {
-                    "id": "mock-1",
-                    "title": "Mock Data: AI in Disease Diagnostics",
-                    "description": "This is mock data because the GNEWS_API_KEY environment variable is not set. Please set the key to see real news.",
-                    "publishedAt": "2025-11-28T10:00:00Z",
-                    "source": {"name": "Mock News Daily"},
-                    "url": "https://www.example.com/mock-article-1",
-                    "image": "https://placehold.co/600x337/3b82f6/ffffff?text=MOCK+NEWS"
-                }
-            ]
-        }
+             "status": "success",
+             "category": category,
+             "language": lang,
+             "page": page,
+             "total_pages": 5,
+             "articles": [
+                 {
+                     "id": "mock-1",
+                     "title": "Mock Data: AI in Disease Diagnostics",
+                     "description": "This is mock data because the GNEWS_API_KEY environment variable is not set.",
+                     "publishedAt": "2025-11-28T10:00:00Z",
+                     "source": {"name": "Mock News Daily"},
+                     "url": "https://www.example.com/mock-article-1",
+                     "image": "https://placehold.co/600x337/3b82f6/ffffff?text=MOCK+NEWS"
+                 }
+             ]
+         }
 
     # NewsAPI Endpoint
     url = f"https://newsapi.org/v2/top-headlines?category={category}&language={lang}&page={page}&pageSize=20&apiKey={GNEWS_API_KEY}"
@@ -277,7 +298,6 @@ def get_news(category: str = "health", lang: str = "en", page: int = 1):
             print(f"ERROR: NewsAPI returned status '{data.get('status')}' - Message: {data.get('message')}")
             return {"status": "error", "articles": [], "message": data.get('message')}
 
-        # Format Data for React Frontend
         formatted_articles = []
         for article in data.get("articles", []):
             if article.get("title") == "[Removed]" or not article.get("url"):
@@ -320,18 +340,15 @@ def get_news(category: str = "health", lang: str = "en", page: int = 1):
 # -------------------------
 @router.post("/rays/mri")
 async def analyze_mri(file: UploadFile = File(...)):
-    """Analyze MRI scan - uploadMri()"""
     if MRI_MODEL is None:
         return JSONResponse(status_code=503, content={"error": "MRI Model not ready"})
 
     temp_filename = os.path.join(UPLOAD_DIR, f"{int(time.time())}_{file.filename}")
 
     try:
-        # Save uploaded file
         with open(temp_filename, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        # Predict
         label, confidence = predict_mri_image(temp_filename)
         
         return {
@@ -348,7 +365,6 @@ async def analyze_mri(file: UploadFile = File(...)):
             content={"error": "Analysis failed", "message": str(e)}
         )
     finally:
-        # Clean up
         if os.path.exists(temp_filename):
             os.remove(temp_filename)
 
@@ -357,34 +373,25 @@ async def analyze_mri(file: UploadFile = File(...)):
 # -------------------------
 @router.post("/analysis/ckd/file")
 async def analyze_ckd_file(file: UploadFile = File(...)):
-    """
-    Analyze CKD data uploaded as a CSV file (one column per feature).
-    Expected columns: gfr, c3_c4, blood_pressure, serum_creatinine, serum_calcium, bun, urine_ph, oxalate_levels
-    """
     if not CKD_MODEL_READY:
         return JSONResponse(status_code=503, content={"error": "CKD Models not ready"})
 
     temp_filename = os.path.join(UPLOAD_DIR, f"ckd_input_{int(time.time())}_{file.filename}")
 
     try:
-        # Save uploaded file temporarily
         with open(temp_filename, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        # Read CSV file
         input_df = pd.read_csv(temp_filename)
         
         if len(input_df.columns) != len(FEATURE_ORDER):
             raise ValueError(
-                f"Number of columns in the file ({len(input_df.columns)}) does not match required features ({len(FEATURE_ORDER)}). "
-                f"Expected columns: {', '.join(FEATURE_ORDER)}"
+                f"Number of columns ({len(input_df.columns)}) != features ({len(FEATURE_ORDER)}). "
+                f"Expected: {', '.join(FEATURE_ORDER)}"
             )
 
-        # Ensure correct column order and scale features
         input_df = input_df[FEATURE_ORDER]
         scaled_features = CKD_SCALER.transform(input_df)
-
-        # Predict diagnosis (only first row)
         diagnosis_prediction = CKD_DIAGNOSIS_MODEL.predict(scaled_features)[0]
 
         if diagnosis_prediction == 1:
@@ -410,7 +417,7 @@ async def analyze_ckd_file(file: UploadFile = File(...)):
         print(f"ERROR: CKD analysis failed: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"error": "Analysis failed", "message": f"Error processing file and predicting: {str(e)}"}
+            content={"error": "Analysis failed", "message": str(e)}
         )
     finally:
         if os.path.exists(temp_filename):
@@ -427,14 +434,10 @@ async def analyze_ckd_manual(
     urine_ph: float,
     oxalate_levels: float
 ):
-    """
-    Analyze CKD data from manual input (form data).
-    """
     if not CKD_MODEL_READY:
         return JSONResponse(status_code=503, content={"error": "CKD Models not ready"})
 
     try:
-        # Create DataFrame from input
         input_data = {
             'gfr': [gfr],
             'c3_c4': [c3_c4],
@@ -448,11 +451,7 @@ async def analyze_ckd_manual(
 
         input_df = pd.DataFrame(input_data)
         input_df = input_df[FEATURE_ORDER]
-
-        # Scale features
         scaled_features = CKD_SCALER.transform(input_df)
-
-        # Predict diagnosis
         diagnosis_prediction = CKD_DIAGNOSIS_MODEL.predict(scaled_features)[0]
 
         if diagnosis_prediction == 1:
@@ -482,12 +481,9 @@ async def analyze_ckd_manual(
             content={"error": "Analysis failed", "message": str(e)}
         )
 
-# Include router with /api prefix
 app.include_router(router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
-# -------------------------
-# Run Uvicorn in Prod
-# -------------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -1,18 +1,13 @@
 import Layout from "../../components/Layout";
-import { useNavigate } from "react-router-dom";
+import ProtectedRoute from "../../components/ProtectedRoute";
 import ComingSoon from "./components/ComingSoon";
 
-export default function AskDoc() {
-  const navigate = useNavigate();
-
-  // Function to handle navigation
-  const handleNav = (path) => {
-    navigate(path);
-  };
-
+export default function AskDocPage() {
   return (
-    <Layout>
-      <ComingSoon onNavigate={handleNav} />
-    </Layout>
+    <ProtectedRoute>
+      <Layout>
+        <ComingSoon />
+      </Layout>
+    </ProtectedRoute>
   );
 }

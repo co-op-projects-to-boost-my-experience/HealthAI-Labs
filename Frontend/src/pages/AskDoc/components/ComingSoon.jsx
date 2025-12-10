@@ -1,21 +1,14 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Stethoscope, Sparkles, ArrowRight, Clock, Bell } from 'lucide-react';
 
-const AskDoctor = ({ onNavigate }) => {
-  // Function to handle navigation - will be replaced with actual router navigation
-  const handleNav = (path) => {
-    if (onNavigate) {
-      onNavigate(path);
-    } else if (window.navigate) {
-      window.navigate(path);
-    } else {
-      window.location.href = path;
-    }
-  };
+const ComingSoon = () => {
+  const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-6 py-20">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="max-w-2xl w-full text-center space-y-8">
+        
         {/* Icon with animation */}
         <div className="relative inline-block">
           <div className="absolute inset-0 bg-blue-200 rounded-full blur-3xl opacity-30 animate-pulse"></div>
@@ -30,12 +23,12 @@ const AskDoctor = ({ onNavigate }) => {
         {/* Badge */}
         <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-full text-sm font-medium">
           <Clock size={16} />
-          Coming Soon
+          <span>Coming Soon</span>
         </div>
 
         {/* Heading */}
         <div className="space-y-4">
-          <h1 className="text-5xl lg:text-6xl font-bold text-gray-900">
+          <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight">
             Ask a Doctor
           </h1>
           <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed">
@@ -45,7 +38,7 @@ const AskDoctor = ({ onNavigate }) => {
 
         {/* Features preview */}
         <div className="grid md:grid-cols-2 gap-4 max-w-xl mx-auto pt-8">
-          <div className="bg-white rounded-xl p-6 shadow-md text-left">
+          <div className="bg-white rounded-xl p-6 shadow-md text-left border border-gray-50">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
               <Stethoscope size={20} className="text-blue-600" />
             </div>
@@ -53,7 +46,7 @@ const AskDoctor = ({ onNavigate }) => {
             <p className="text-sm text-gray-600">Get reliable medical information instantly</p>
           </div>
           
-          <div className="bg-white rounded-xl p-6 shadow-md text-left">
+          <div className="bg-white rounded-xl p-6 shadow-md text-left border border-gray-50">
             <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-3">
               <Bell size={20} className="text-indigo-600" />
             </div>
@@ -63,9 +56,9 @@ const AskDoctor = ({ onNavigate }) => {
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-wrap gap-4 justify-center pt-4">
+        <div className="flex flex-wrap gap-4 justify-center pt-8">
           <button
-            onClick={() => handleNav('/analysis')}
+            onClick={() => navigate('/analysis')}
             className="group flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-full font-medium text-lg hover:bg-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             Try Test Analysis
@@ -73,20 +66,15 @@ const AskDoctor = ({ onNavigate }) => {
           </button>
           
           <button
-            onClick={() => handleNav('/')}
+            onClick={() => navigate('/')}
             className="flex items-center gap-2 bg-white text-gray-900 px-8 py-4 rounded-full font-medium text-lg border-2 border-gray-200 hover:border-blue-600 hover:text-blue-600 transition-all duration-300 shadow-md hover:shadow-lg"
           >
             Back to Home
           </button>
         </div>
-
-        {/* Timeline hint */}
-        <p className="text-gray-500 text-sm pt-8">
-          We're working hard to bring you this feature. Check back soon!
-        </p>
       </div>
     </div>
   );
 };
 
-export default AskDoctor;
+export default ComingSoon;
