@@ -103,10 +103,12 @@ export default function RaysComponent() {
       setResult(null);
       setConfidencePercent(0);
 
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const data = await uploadMri(formData);
+      // ------------------------------------------------------------------
+      // FIX APPLIED: Pass the raw File object, not the pre-constructed FormData.
+      // The uploadMri function in api.js handles FormData creation internally.
+      // ------------------------------------------------------------------
+      const data = await uploadMri(file); 
+      // ------------------------------------------------------------------
 
       const label = data.prediction || "Unknown";
       const confidence = typeof data.confidence === "number" ? data.confidence : 0;
@@ -118,7 +120,9 @@ export default function RaysComponent() {
       setStatusType("success");
     } catch (err) {
       console.error("Analysis error:", err);
-      setStatus("Failed to analyze image. Please ensure the API is running and try again.");
+      // Use the message property from the error object returned by api.js
+      const errorMessage = err.message || "Failed to analyze image. Please ensure the API is running and try again.";
+      setStatus(errorMessage);
       setStatusType("error");
     } finally {
       setLoading(false);
@@ -137,7 +141,10 @@ export default function RaysComponent() {
   const currentDiseaseInfo = (() => {
     if (!result?.label) return null;
     const normalized = result.label.toLowerCase().replace(/\s/g, "");
-    return diseaseInfo[normalized] || diseaseInfo["unknown"];
+    // Handles the 'No Tumor' case which the backend outputs as 'No Tumor'
+    if (normalized === "notumor") return diseaseInfo["notumor"];
+    // Handles the four defined tumor types: Glioma, Meningioma, Pituitary
+    return diseaseInfo[normalized] || diseaseInfo["unknown"]; 
   })();
 
   return (
@@ -330,7 +337,7 @@ export default function RaysComponent() {
                     <CheckCircle className="w-7 h-7 text-green-500" />
                     Analysis Results
                   </h2>
-
+                  
                   {/* Prediction Card */}
                   <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                     <div className="flex items-center justify-between mb-4">

@@ -1,85 +1,69 @@
-import React from 'react';
-import logo from '../assets/healthai-logo.png';
+import { Link } from "react-router-dom";
+import { Heart } from "lucide-react";
+import logoImage from "../assets/healthai-logo.png";
 
-const Footer = () => {
-  // Data-driven links make the JSX cleaner and easier to maintain
-  const featuresLinks = [
-    { name: "Test Analysis", href: "#" },
-    { name: "X-Ray Diagnosis", href: "#" },
-    { name: "Medical News", href: "#" },
-    { name: "Ask Doctor", href: "#", badge: "Coming Soon" },
-  ];
-
-  const companyLinks = [
-    { name: "Home", href: "/" },
-    { name: "About", href: "/about" },
-    { name: "Privacy Policy", href: "#" },
-    { name: "Contact Us", href: "/contact" },
-  ];
+export default function Footer() {
+  const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-white border-t border-gray-200">
-      <div className="max-w-7xl mx-auto px-6 py-10 flex flex-col md:flex-row md:justify-between md:items-start gap-10 md:gap-0">
-        
-        {/* Left Section - Brand */}
-        <div className="flex flex-col md:flex-row md:items-center md:gap-4 max-w-md">
-          <img
-            src={logo}
-            alt="HealthAI Lab Logo"
-            className="h-14 flex-shrink-0" 
-          />
-          <div className="mt-4 md:mt-0">
-            <h2 className="font-bold text-[28px] text-[#3d3d3d] leading-tight select-none">
-              HealthAI Lab
-            </h2>
-            <p className="mt-2 text-gray-500 text-sm leading-relaxed">
-              Advanced AI-powered medical diagnostics. Upload your tests and X-rays to receive instant AI analysis.
+    <footer className="mt-auto bg-white/50 backdrop-blur-sm border-t border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          {/* Brand */}
+          <div className="md:col-span-1">
+            <div className="flex items-center space-x-2 mb-4">
+              <img src={logoImage} alt="HealthAI Lab" className="h-8 w-8" />
+              <span className="font-bold text-gray-900 text-lg">HealthAI Lab</span>
+            </div>
+            <p className="text-gray-600 text-sm">
+              Advanced AI-powered medical diagnostics for better health outcomes.
+            </p>
+          </div>
+
+          {/* Quick Links */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
+            <ul className="space-y-2">
+              <li><Link to="/" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Home</Link></li>
+              <li><Link to="/about" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">About</Link></li>
+              <li><Link to="/contact" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Contact</Link></li>
+            </ul>
+          </div>
+
+          {/* Services */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-4">Services</h3>
+            <ul className="space-y-2">
+              <li><Link to="/analysis" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Analysis</Link></li>
+              <li><Link to="/rays" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">X-Ray Diagnosis</Link></li>
+              <li><Link to="/askdoctor" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Ask Doctor</Link></li>
+              <li><Link to="/news" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Medical News</Link></li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-4">Legal</h3>
+            <ul className="space-y-2">
+              <li><a href="#" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Privacy Policy</a></li>
+              <li><a href="#" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Terms of Service</a></li>
+              <li><a href="#" className="text-gray-600 hover:text-blue-600 text-sm transition-colors">Disclaimer</a></li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="mt-8 pt-8 border-t border-gray-200">
+          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+            <p className="text-gray-600 text-sm">
+              © {currentYear} HealthAI Lab. All rights reserved.
+            </p>
+            <p className="text-gray-600 text-sm flex items-center">
+              Made with <Heart className="h-4 w-4 mx-1 text-red-500 fill-current" /> for better health
             </p>
           </div>
         </div>
-
-        {/* Right Section - Navigation */}
-        <div className="flex flex-col sm:flex-row gap-8 md:gap-20 text-gray-600 text-sm">
-          {/* Features Column */}
-          <div>
-            <h3 className="text-sm font-semibold text-[#1f2937] mb-4 select-none">FEATURES</h3>
-            <ul className="space-y-3">
-              {featuresLinks.map((link, index) => (
-                <li key={index} className="flex items-center gap-2">
-                  <a href={link.href} className="hover:text-[#1e90ff] transition-colors duration-200">
-                    {link.name}
-                  </a>
-                  {link.badge && (
-                    <span className="inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-0.5 rounded select-none">
-                      {link.badge}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Company Column */}
-          <div>
-            <h3 className="text-sm font-semibold text-[#1f2937] mb-4 select-none">COMPANY</h3>
-            <ul className="space-y-3">
-              {companyLinks.map((link, index) => (
-                <li key={index}>
-                  <a href={link.href} className="hover:text-[#1e90ff] transition-colors duration-200">
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-200 mt-8 py-6 text-center text-gray-500 text-xs select-none">
-        Copyright 2025 © HealthAI Lab - All Rights Reserved
       </div>
     </footer>
   );
-};
-
-export default Footer;
+}

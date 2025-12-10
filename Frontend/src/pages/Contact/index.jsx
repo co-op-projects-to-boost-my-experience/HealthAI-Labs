@@ -1,18 +1,17 @@
 import Layout from "../../components/Layout";
 import { fetchContact } from "../../api";
-import { useEffect, useState } from "react";
+import { useQuery } from '@tanstack/react-query';
+import { Mail, Phone, MapPin } from 'lucide-react';
 
-export default function Home() {
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetchContact().then(res => setMessage(res.message));
-  }, []);
+export default function ContactPage() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['contact'],
+    queryFn: fetchContact,
+    retry: 1
+  });
 
   return (
     <Layout>
-      <h1>Contact US</h1>
-      <p>{message}</p>
     </Layout>
   );
 }
