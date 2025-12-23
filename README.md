@@ -1,110 +1,3 @@
-# 🧬 HealthAI Labs
-
-HealthAI Labs is a modern full-stack project that delivers AI-powered health tools and real-time medical news.  
-It includes:
-
-- **FastAPI Backend** – AI endpoints & medical news API  
-- **React Frontend** – clean UI served via Nginx  
-- **Dockerized Deployment** – start everything with one command  
-
-This repository lets you deploy the entire system easily using **Docker Compose**.
-
----
-
-# ✨ Features
-
-### 🧠 Backend (FastAPI)
-- `/api/news` → Fetches real-time medical news from GNews API  
-- `/rays`, `/report`, `/analysis`, `/askdoctor` → AI service routes  
-- Automatic fallback to **mock news** when no API key exists  
-- Fully asynchronous using FastAPI + httpx  
-
-### 🎨 Frontend (React + TailwindCSS)
-- Responsive modern news layout  
-- Floating news card design  
-- Skeleton loading  
-- Beautiful animations  
-
-### 🐳 Deployment
-- Docker images hosted on Docker Hub  
-- One network + persistent Nginx cache  
-- Cross-container communication via bridge network  
-
----
-
-# 🏗️ Architecture
-
-```
-                ┌─────────────────────────┐
-                │       Frontend          │
-                │   React + Nginx (80)    │
-                └─────────────┬───────────┘
-                              │
-                              ▼
-                       healthai-network
-                              │
-                              ▼
-                ┌─────────────────────────┐
-                │        Backend          │
-                │     FastAPI (8000)      │
-                └─────────────────────────┘
-```
-
----
-
-# 📦 Technologies Used
-
-**Backend**  
-FastAPI, Python, httpx, Uvicorn
-
-**Frontend**  
-React, Vite, TailwindCSS, Axios, Nginx
-
-**DevOps**  
-Docker, Docker Compose, Docker Hub
-
----
-
-# 🔧 Requirements
-
-- Docker  
-- Docker Compose  
-- Git  
-
----
-
-# 🐳 Install Docker (Latest Version)
-
-### Ubuntu / Debian
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-```
-
-Allow Docker without sudo:
-```bash
-sudo usermod -aG docker $USER
-```
-Logout/login again.
-
----
-
-# 🧩 Install Docker Compose (Latest)
-
-```bash
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
-  -o /usr/local/bin/docker-compose
-
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-Check version:
-```bash
-docker-compose --version
-```
-
----
-
 # 📁 Clone the Project
 
 ```bash
@@ -139,32 +32,108 @@ Here is the full `docker-compose.yml`:
 version: '3.8'
 
 services:
-  backend:
-    image: passw0rd010/healthai-labs:backendv2
-    container_name: healthai-backend
-    ports:
-      - "8000:8000"
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: healthai_postgres
+    restart: unless-stopped
     environment:
-      - GNEWS_API_KEY=${GNEWS_API_KEY}
-    env_file:
-      - .env
+      POSTGRES_USER: healthai
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: healthai_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthai"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - healthai-network
 
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: healthai_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - healthai-network
+
+  # Backend API
+  backend:
+    image: passw0rd010/healthai-backend:latest
+    container_name: healthai-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env  # Path to .env in root
+    environment:
+      DATABASE_URL: postgresql://healthai:${DB_PASSWORD}@db:5432/healthai_db
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - healthai-network
+    command: >
+      sh -c '
+      echo "Waiting for database to be ready...";
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        echo "Attempt $$i: Checking database connection...";
+        if python -c "from db import check_db_connection; check_db_connection()"; then
+          echo "Database is ready!";
+          break;
+        fi;
+        if [ $$i -eq 10 ]; then
+          echo "Database connection failed after 10 attempts";
+          exit 1;
+        fi;
+        echo "Database not ready, waiting 3 seconds...";
+        sleep 3;
+      done;
+      echo "Initializing database tables...";
+      python -c "from db import init_db; init_db()";
+      echo "Starting uvicorn server...";
+      uvicorn app:app --host 0.0.0.0 --port 8000 --workers 1 --log-level info
+      '
+
+  # Frontend (React + Nginx)
   frontend:
-    image: passw0rd010/healthai-labs:frontendv2
+    image: passw0rd010/healthai-frontend:latest
     container_name: healthai-frontend
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - backend
-    volumes:
-      - nginx_cache:/var/cache/nginx
     networks:
       - healthai-network
 
 volumes:
-  nginx_cache:
+  postgres_data:
+  minio_data:
+  backend_uploads:
+  backend_logs:
 
 networks:
   healthai-network:
@@ -179,6 +148,8 @@ Start everything:
 
 ```bash
 docker-compose up -d
+or
+docker compose up -d
 ```
 
 Backend → http://localhost:8000  
@@ -195,6 +166,8 @@ docker ps
 
 ```bash
 docker-compose down
+or
+docker compose down
 ```
 
 Remove containers + volumes:
@@ -207,8 +180,8 @@ docker-compose down -v
 # 🔄 Update to Newest Images
 
 ```bash
-docker pull passw0rd010/healthai-labs:backend
-docker pull passw0rd010/healthai-labs:frontend
+docker pull  passw0rd010/healthai-backendend:latest
+docker pull  passw0rd010/healthai-frontend:latest
 docker-compose up -d --force-recreate
 ```
 
@@ -253,16 +226,4 @@ docker-compose logs -f
 
 Pull requests and issues are welcome!
 
----
-
-# 👤 Author
-
-**Abdullah Sameh**  
-Docker Hub: passw0rd010  
-GitHub: https://github.com/passw0rd010
-
----
-
-# 📜 License  
-MIT License
 
