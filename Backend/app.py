@@ -10,6 +10,7 @@ import requests
 from fastapi import FastAPI, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 # --- FIX: Removed TFSMLayer import which was causing the crash ---
 # from keras.layers import TFSMLayer 
@@ -28,6 +29,7 @@ CKD_MODEL_DIR = os.path.join(os.path.dirname(__file__), "CKD")
 CKD_SCALER_PATH = os.path.join(CKD_MODEL_DIR, "data_scaler.joblib")
 CKD_DIAGNOSIS_PATH = os.path.join(CKD_MODEL_DIR, "ckd_diagnosis_model.joblib")
 CKD_STAGE_PATH = os.path.join(CKD_MODEL_DIR, "ckd_stage_model.joblib")
+ASCVD_MODEL_PATH = os.path.join(os.path.dirname(__file__), "ASCVD_Risk_Estimator.pkl")
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -37,12 +39,28 @@ CKD_SCALER = None
 CKD_DIAGNOSIS_MODEL = None
 CKD_STAGE_MODEL = None
 CKD_MODEL_READY = False
+ASCVD_MODEL = None
+ASCVD_MODEL_READY = False
 
 # CKD Feature Order
 FEATURE_ORDER = ['gfr', 'c3_c4', 'blood_pressure', 'serum_creatinine', 'serum_calcium', 'bun', 'urine_ph', 'oxalate_levels']
 
 # API Key read from the environment variable specified by the user
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
+
+# -------------------------
+# Pydantic Models
+# -------------------------
+class ASCVDRiskInput(BaseModel):
+    blood_glucose: float
+    HbA1C: float
+    Systolic_BP: float
+    Diastolic_BP: float
+    LDL: float
+    HDL: float
+    Triglycerides: float
+    Haemoglobin: float
+    MCV: float
 
 # -------------------------
 # FastAPI Setup
@@ -67,7 +85,6 @@ def load_mri_model():
     
     if not os.path.exists(MODEL_DIR):
         print(f"ERROR: MRI model not found at {MODEL_DIR}")
-        # We don't raise here to allow the app to start even if model is missing (optional)
         return
 
     # Force CPU in production containers without GPU
@@ -147,6 +164,93 @@ def load_ckd_models():
         CKD_MODEL_READY = False
 
 # -------------------------
+# Helper Functions (ASCVD Risk Estimator Model)
+# -------------------------
+def load_ascvd_model():
+    """Load the ASCVD Risk Estimator model."""
+    global ASCVD_MODEL, ASCVD_MODEL_READY
+    
+    try:
+        if not os.path.exists(ASCVD_MODEL_PATH):
+            print(f"WARNING: ASCVD Risk Estimator model not found at {ASCVD_MODEL_PATH}")
+            return
+        
+        print(f"INFO: Loading ASCVD Risk Estimator model from {ASCVD_MODEL_PATH}...")
+        ASCVD_MODEL = joblib.load(ASCVD_MODEL_PATH)
+        ASCVD_MODEL_READY = True
+        print("INFO: ✅ ASCVD Risk Estimator Model loaded successfully")
+    except Exception as e:
+        print(f"ERROR: Failed to load ASCVD Risk Estimator model: {e}")
+        ASCVD_MODEL_READY = False
+
+def feature_extraction(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Takes a DataFrame with the following columns:
+    ['blood_glucose', 'hba1c', 'systolic_bp', 'diastolic_bp',
+     'ldl', 'hdl', 'triglycerides', 'haemoglobin', 'mcv']
+
+    Returns the same DataFrame with additional engineered features.
+    """
+    df.columns = df.columns.str.lower()
+    df['glucose_hba1c_ratio'] = df['blood_glucose'] / df['hba1c']
+    df['pulse_pressure'] = df['systolic_bp'] - df['diastolic_bp']
+    df['MAP'] = (df['systolic_bp'] + 2 * df['diastolic_bp']) / 3
+    df['hypertension_flag'] = ((df['systolic_bp'] >= 140) | (df['diastolic_bp'] >= 90)).astype(int)
+    df['total_cholesterol'] = df['ldl'] + df['hdl'] + (df['triglycerides'] / 5)
+    df['ldl_hdl_ratio'] = df['ldl'] / df['hdl']
+    df['tg_hdl_ratio'] = df['triglycerides'] / df['hdl']
+    df['non_hdl'] = df['total_cholesterol'] - df['hdl']
+    df['anaemia_flag'] = (df['haemoglobin'] < 12).astype(int)
+    df['microcytosis_flag'] = (df['mcv'] < 80).astype(int)
+    df['hb_mcv_ratio'] = df['haemoglobin'] / df['mcv']
+    df['risk_score'] = (df['blood_glucose'] / 200) + (df['ldl'] / 160) + (df['triglycerides'] / 200) + (df['systolic_bp'] / 140)
+
+    return df
+
+def get_disease_recommendations(disease: str) -> dict:
+    """Get prevention and treatment recommendations for a disease."""
+    recommendations = {
+        'Anemia': {
+            'title': 'Anemia',
+            'prevention': 'Maintain a balanced diet rich in iron (red meat, spinach, lentils). Consume vitamin C to increase iron absorption. Avoid tea/coffee after meals.',
+            'treatment': 'Iron supplements under medical supervision, sometimes vitamin B12 or folic acid supplementation.',
+            'suggested_plan': 'Daily iron tablets + iron-rich diet + monitor hemoglobin levels regularly.'
+        },
+        'Hypertension': {
+            'title': 'Hypertension',
+            'prevention': 'Reduce salt intake, exercise regularly, maintain healthy weight, avoid smoking.',
+            'treatment': 'Blood pressure medication under medical supervision and regular blood pressure monitoring.',
+            'suggested_plan': 'Daily blood pressure monitoring + medications (ACE inhibitors / Beta blockers) + reduce salt intake.'
+        },
+        'Diabetes': {
+            'title': 'Diabetes',
+            'prevention': 'Healthy diet with low sugar, maintain ideal weight, exercise regularly.',
+            'treatment': 'Blood sugar lowering medications (such as Metformin) or insulin therapy.',
+            'suggested_plan': 'Balanced diet + daily exercise + medication as prescribed.'
+        },
+        'High_Cholesterol': {
+            'title': 'High Cholesterol',
+            'prevention': 'Reduce saturated fats (fried foods, butter), increase fiber (vegetables, fruits, oats), regular exercise.',
+            'treatment': 'Cholesterol-lowering medications (Statins) under medical supervision and healthy diet.',
+            'suggested_plan': 'Reduce fat intake + Statin medications + regular lipid profile monitoring.'
+        },
+        'Fit': {
+            'title': 'Healthy / Normal',
+            'prevention': 'Maintain healthy diet, exercise regularly, periodic health checkups.',
+            'treatment': 'No treatment needed, just continue healthy lifestyle.',
+            'suggested_plan': 'Annual health checkup + maintain healthy lifestyle.'
+        },
+        'Unknown': {
+            'title': 'Unknown',
+            'prevention': 'Unable to provide recommendations due to insufficient data.',
+            'treatment': 'Please consult a medical professional.',
+            'suggested_plan': 'Please consult a medical professional.'
+        }
+    }
+    
+    return recommendations.get(disease, recommendations['Unknown'])
+
+# -------------------------
 # Startup Event
 # -------------------------
 @app.on_event("startup")
@@ -164,6 +268,7 @@ def startup_event():
     # Load ML models
     load_mri_model()
     load_ckd_models()
+    load_ascvd_model()
     
     print("INFO: ✅ HealthAI Backend started successfully")
 
@@ -210,7 +315,7 @@ def get_about():
         "name": "HealthAI Labs",
         "description": "AI-powered medical imaging analysis platform",
         "version": "1.0.0",
-        "features": ["MRI Analysis", "Brain Tumor Detection", "Medical Reports", "CKD Analysis"]
+        "features": ["MRI Analysis", "Brain Tumor Detection", "Medical Reports", "CKD Analysis", "ASCVD Risk Assessment"]
     }
 
 @router.get("/analysis")
@@ -232,6 +337,13 @@ def get_analysis():
                 "description": "Comprehensive CKD analysis from laboratory data",
                 "type": "data",
                 "ready": CKD_MODEL_READY
+            },
+            {
+                "id": "ascvd-risk",
+                "name": "ASCVD Risk Assessment",
+                "description": "Predict cardiovascular disease risk based on blood test markers (glucose, cholesterol, blood pressure, etc.)",
+                "type": "data",
+                "ready": ASCVD_MODEL_READY
             },
             {
                 "id": "chest-xray",
@@ -476,6 +588,69 @@ async def analyze_ckd_manual(
 
     except Exception as e:
         print(f"ERROR: CKD manual analysis failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Analysis failed", "message": str(e)}
+        )
+
+# -------------------------
+# ASCVD Risk Assessment Endpoint
+# -------------------------
+@router.post("/analysis/ascvd-risk")
+async def analyze_ascvd_risk(data: ASCVDRiskInput):
+    """
+    Predict cardiovascular disease risk based on health markers from blood tests.
+    """
+    if not ASCVD_MODEL_READY:
+        return JSONResponse(status_code=503, content={"error": "ASCVD Risk Estimator Model not ready"})
+
+    try:
+        # Convert input to dictionary
+        input_data = {
+            'blood_glucose': data.blood_glucose,
+            'HbA1C': data.HbA1C,
+            'Systolic_BP': data.Systolic_BP,
+            'Diastolic_BP': data.Diastolic_BP,
+            'LDL': data.LDL,
+            'HDL': data.HDL,
+            'Triglycerides': data.Triglycerides,
+            'Haemoglobin': data.Haemoglobin,
+            'MCV': data.MCV
+        }
+
+        # Create DataFrame
+        df = pd.DataFrame([input_data])
+
+        # Apply feature extraction
+        processed_df = feature_extraction(df.copy())
+
+        # Make prediction
+        prediction = ASCVD_MODEL.predict(processed_df)[0]
+        
+        # Disease mapping
+        disease_map = {
+            0: 'Anemia',
+            1: 'Fit',
+            2: 'Hypertension',
+            3: 'Diabetes',
+            4: 'High_Cholesterol'
+        }
+        
+        predicted_disease = disease_map.get(prediction, 'Unknown')
+        
+        # Get recommendations
+        recommendation = get_disease_recommendations(predicted_disease)
+        
+        return {
+            "status": "success",
+            "disease": predicted_disease,
+            "disease_code": int(prediction),
+            "recommendation": recommendation,
+            "input_data": input_data
+        }
+
+    except Exception as e:
+        print(f"ERROR: ASCVD Risk assessment failed: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": "Analysis failed", "message": str(e)}

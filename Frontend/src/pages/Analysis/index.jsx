@@ -1,10 +1,11 @@
 import Layout from "../../components/Layout";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import CKDAnalysis from "./components/CKD";
+import ASCVDAnalysis from "./components/ASCVD";
 import { fetchAnalysis } from "../../api";
 import { useQuery } from '@tanstack/react-query';
 import { useState } from "react";
-import { Activity, Brain, Stethoscope } from "lucide-react";
+import { Activity, Brain, Stethoscope, Heart } from "lucide-react";
 
 export default function AnalysisPage() {
   const [selectedAnalysis, setSelectedAnalysis] = useState(null);
@@ -15,7 +16,7 @@ export default function AnalysisPage() {
     retry: 1
   });
 
-  // When CKD is selected → open CKD page
+  // When CKD is selected
   if (selectedAnalysis === "ckd-analysis") {
     return (
       <ProtectedRoute>
@@ -29,6 +30,26 @@ export default function AnalysisPage() {
             </button>
 
             <CKDAnalysis />
+          </div>
+        </Layout>
+      </ProtectedRoute>
+    );
+  }
+
+  // When ASCVD is selected
+  if (selectedAnalysis === "ascvd-risk") {
+    return (
+      <ProtectedRoute>
+        <Layout>
+          <div className="pt-24 pb-8 px-4 max-w-7xl mx-auto">
+            <button
+              onClick={() => setSelectedAnalysis(null)}
+              className="text-red-600 hover:text-red-700 font-medium flex items-center gap-2 hover:gap-3 transition-all mb-6"
+            >
+              ← Back to Analysis Options
+            </button>
+
+            <ASCVDAnalysis />
           </div>
         </Layout>
       </ProtectedRoute>
@@ -57,7 +78,7 @@ export default function AnalysisPage() {
               </p>
             </div>
 
-            {/* Analysis Options */}
+            {/* Analysis Options Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
               {/* Brain MRI */}
@@ -86,7 +107,7 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              {/* CKD */}
+              {/* CKD Analysis */}
               <div
                 onClick={() => setSelectedAnalysis("ckd-analysis")}
                 className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all p-8 border-2 border-purple-100 hover:border-purple-300 cursor-pointer group"
@@ -115,7 +136,36 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              {/* Coming Soon Cards */}
+              {/* ASCVD Risk Assessment */}
+              <div
+                onClick={() => setSelectedAnalysis("ascvd-risk")}
+                className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all p-8 border-2 border-red-100 hover:border-red-300 cursor-pointer group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <Heart className="w-8 h-8 text-white" />
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-2xl font-bold text-gray-900">ASCVD Risk Assessment</h2>
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                        Active
+                      </span>
+                    </div>
+
+                    <p className="text-gray-600 mb-4">
+                      Predict cardiovascular disease risk based on blood markers and vital signs.
+                    </p>
+
+                    <span className="text-red-600 hover:text-red-700 font-semibold">
+                      Start Assessment →
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Coming Soon Card */}
               <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 opacity-75">
                 <div className="flex items-start gap-4">
                   <div className="w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl flex items-center justify-center">
@@ -139,29 +189,6 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 opacity-75">
-                <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl flex items-center justify-center">
-                    <Activity className="w-8 h-8 text-white" />
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <h2 className="text-2xl font-bold text-gray-900">More Coming Soon</h2>
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
-                        Coming Soon
-                      </span>
-                    </div>
-
-                    <p className="text-gray-600 mb-4">
-                      Additional medical analysis tools are in development.
-                    </p>
-
-                    <span className="text-gray-400 font-semibold">Stay Tuned</span>
-                  </div>
-                </div>
-              </div>
-
             </div>
 
             {/* Info Section */}
@@ -173,7 +200,8 @@ export default function AnalysisPage() {
               <p className="text-gray-700 leading-relaxed">
                 Our AI-powered tools use advanced machine learning models trained on large medical datasets.
                 These tools support healthcare providers by offering quick insights and analysis. They complement
-                — not replace — professional medical judgment.
+                — not replace — professional medical judgment. Always consult with qualified healthcare professionals
+                for proper diagnosis and treatment decisions.
               </p>
             </div>
           </div>

@@ -55,12 +55,14 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./.env  # Path to .env in root
+      - ./.env
     environment:
       DATABASE_URL: postgresql://healthai:${DB_PASSWORD}@db:5432/healthai_db
     volumes:
       - ./Backend/uploads:/app/uploads
       - ./Backend/logs:/app/logs
+    # Run as root to avoid permission issues with bind mounts
+    user: "0:0"
     depends_on:
       db:
         condition: service_healthy
@@ -88,7 +90,7 @@ services:
       uvicorn app:app --host 0.0.0.0 --port 8000 --workers 1 --log-level info
       '
 
-  # Front end (React + Nginx)
+  # Frontend (React + Nginx)
   frontend:
     build:
       context: ./Frontend
