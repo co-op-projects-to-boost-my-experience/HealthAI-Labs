@@ -117,6 +117,38 @@ export const analyzeCKDFile = (file) => {
 };
 
 // =========================
+// ASCVD Risk Assessment
+// =========================
+/**
+ * Analyze cardiovascular disease risk based on blood test markers
+ * @param {Object} data - Blood test data
+ * @param {number} data.blood_glucose - Blood glucose level
+ * @param {number} data.HbA1C - HbA1C level
+ * @param {number} data.Systolic_BP - Systolic blood pressure
+ * @param {number} data.Diastolic_BP - Diastolic blood pressure
+ * @param {number} data.LDL - LDL cholesterol
+ * @param {number} data.HDL - HDL cholesterol
+ * @param {number} data.Triglycerides - Triglycerides level
+ * @param {number} data.Haemoglobin - Haemoglobin level
+ * @param {number} data.MCV - Mean Corpuscular Volume
+ * @returns {Promise} Response with disease prediction and recommendations
+ */
+export const analyzeASCVDRisk = (data) => {
+  console.log('🔄 API Call: analyzeASCVDRisk');
+  console.log('📤 Data being sent:', data);
+  
+  return apiPost('/analysis/ascvd-risk', data)
+    .then(response => {
+      console.log('✅ API Response:', response);
+      return response;
+    })
+    .catch(error => {
+      console.error('❌ API Error:', error);
+      throw error;
+    });
+};
+
+// =========================
 // Authentication Functions
 // =========================
 
@@ -141,8 +173,6 @@ export const signupUser = (userData) =>
   });
 
 // Google Authentication (Uses ID Token)
-// FIX: The parameter 'data' is the object { token: '...' } 
-// and is posted directly, preventing nested object submission.
 export const googleAuth = (data) =>
   apiPost('/auth/google', data).then(res => {
     if (res.access_token) {
@@ -155,7 +185,6 @@ export const googleAuth = (data) =>
 // Logout
 export const logoutUser = async () => {
   try {
-    // You might remove this line if your backend doesn't require a call
     await apiPost('/auth/logout'); 
   } catch (error) {
     console.log('Logout API call failed:', error);
